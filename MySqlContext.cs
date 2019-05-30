@@ -183,6 +183,7 @@ namespace DataBaseService
                 {
                     var value = await cmd.ExecuteScalarAsync();
                     T.Commit();
+                    //logger.Error($"MinPwd: {value}");
                     return await Task.FromResult(value.ToString());
                 }
                 catch (MySqlException ex)
