@@ -9,12 +9,14 @@ namespace DataBaseService
     public class MySqlContext : IDataBaseService
     {
         string connectionString;
-        
+        System.Data.StateChangeEventHandler ConnectionStatusDelegate;
         static Logger logger = LogManager.GetCurrentClassLogger();
 
         MySqlConnection GetConnection()
         {
             var dbConn = new MySqlConnection(connectionString);
+            dbConn.StateChange -= ConnectionStatusDelegate;
+            dbConn.StateChange += ConnectionStatusDelegate;
             return dbConn;
         }
 
