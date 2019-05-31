@@ -1,5 +1,6 @@
 ﻿using MySql.Data.MySqlClient;
 using System;
+using System.Data;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using NLog;
@@ -9,7 +10,7 @@ namespace DataBaseService
     public class MySqlContext : IDataBaseService
     {
         string connectionString;
-        System.Data.StateChangeEventHandler ConnectionStatusDelegate;
+        StateChangeEventHandler ConnectionStatusDelegate;
         static Logger logger = LogManager.GetCurrentClassLogger();
 
         MySqlConnection GetConnection()
@@ -34,6 +35,7 @@ namespace DataBaseService
         /// </summary>
         /// <param name="cp">Parameter set as IConnectionParameters</param>
         public MySqlContext(IConnectionParameters cp) : this(cp.ServerAddress, cp.ServerPort, cp.UserName, cp.Password, cp.DBName, cp.CharSet, cp.SSLMode) { }
+        public MySqlContext(IConnectionParameters cp, StateChangeEventHandler connectionStatus) : this(cp.ServerAddress, cp.ServerPort, cp.UserName, cp.Password, cp.DBName, cp.CharSet, cp.SSLMode, connectionStatus) { }
 
         /// <summary>
         /// Builds a connection string to be used for getting MySql connection to the server, based on parameters.
@@ -47,6 +49,25 @@ namespace DataBaseService
         /// <param name="sslMode">Indicates whether to use SSL mode for the connection (0 - no SSL, 1 - preferred, 2 - required, 3 - verifyCA, 4 - verifyFull)</param>
         public MySqlContext(string serverAddress, uint serverPort, string userName, string passwd, string dbName, string charset, int sslMode)
         {
+            var connString = new MySqlConnectionStringBuilder()
+            {
+                Server = serverAddress,
+                UserID = userName,
+                Password = passwd,
+                Database = dbName,
+                CharacterSet = charset,
+                SslMode = (MySqlSslMode)sslMode,
+                Pooling = true,
+                MinimumPoolSize = 1,
+                MaximumPoolSize = 10,
+                Port = serverPort
+            };
+
+            connectionString = connString.ToString();
+        }
+        public MySqlContext(string serverAddress, uint serverPort, string userName, string passwd, string dbName, string charset, int sslMode, StateChangeEventHandler connectionStatus)
+        {
+            ConnectionStatusDelegate = connectionStatus;
             var connString = new MySqlConnectionStringBuilder()
             {
                 Server = serverAddress,
