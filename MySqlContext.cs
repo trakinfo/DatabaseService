@@ -177,13 +177,11 @@ namespace DataBaseService
             {
                 conn.Open();
                 var T = conn.BeginTransaction();
-                //var cmd = (MySqlCommand)CreateCommand(conn, T, CommandType.Text, sqlString);
                 var cmd = new MySqlCommand { CommandText = sqlString, Connection = conn, Transaction = T };
                 try
                 {
                     var value = await cmd.ExecuteScalarAsync();
                     T.Commit();
-                    //logger.Error($"MinPwd: {value}");
                     return await Task.FromResult(value.ToString());
                 }
                 catch (MySqlException ex)
