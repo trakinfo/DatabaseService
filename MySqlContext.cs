@@ -25,10 +25,7 @@ namespace DataBaseService
         /// Builds a connection string to be used for getting MySql connection to the server, based on a connection string
         /// </summary>
         /// <param name="connectionString"></param>
-        public MySqlContext(string connectionString)
-        {
-            this.connectionString = connectionString;
-        }
+        public MySqlContext(string connectionString) => this.connectionString = connectionString;
 
         /// <summary>
         /// Builds a connection string to be used for getting MySql connection to the server, based on the IConnectionParameters.
@@ -258,6 +255,7 @@ namespace DataBaseService
                 var T = conn.BeginTransaction();
                 //var cmd = CreateCommand(conn, T, CommandType.Text, sqlString);
                 var cmd = new MySqlCommand { CommandText = sqlString, Connection = conn, Transaction = T };
+                
                 createParams(cmd);
                 try
                 {

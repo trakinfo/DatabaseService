@@ -13,11 +13,14 @@ namespace DataBaseService
 
     public interface IDataBaseService
     {
-        //string ConnectionString { get; }
-        //IDbConnection GetConnection();
-        bool TestConnection();
-        //IDataParameter CreateParameter(string name, DbType type, IDbCommand cmd);
-        //IDbCommand CreateCommand(IDbConnection conn, IDbTransaction T, CommandType cmdType, string cmdText);
+         bool TestConnection();
+        /// <summary>
+        /// Get many records from database
+        /// </summary>
+        /// <typeparam name="T">Type of data to return</typeparam>
+        /// <param name="sqlString">Sql select query to get records from database</param>
+        /// <param name="GetDataRow">Callback method to load data into IEnumerable container</param>
+        /// <returns>IEnumerable set of records by pointed type</returns>
         Task<IEnumerable<T>> FetchRecordSetAsync<T>(string sqlString, GetData<T> GetDataRow);
         Task<IEnumerable<T>> FetchRecordSetAsync<T>(string sqlString, object[] sqlParameterValue, DataParameters selectParams, GetData<T> GetDataRow);
         Task<T> FetchRecordAsync<T>(string sqlString, GetData<T> GetDataRow);
@@ -33,7 +36,7 @@ namespace DataBaseService
         /// <summary>
         /// 
         /// </summary>
-        /// <param name="sqlString"></param>
+        /// <param name="sqlString">Sql insert query to add record to database</param>
         /// <param name="sqlParameterValue"></param>
         /// <param name="addParams"></param>
         /// <returns></returns>
