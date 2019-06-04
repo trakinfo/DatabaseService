@@ -14,6 +14,7 @@ namespace DataBaseService
     public interface IDataBaseService
     {
          bool TestConnection();
+
         /// <summary>
         /// Get many records from database
         /// </summary>
@@ -25,6 +26,7 @@ namespace DataBaseService
         Task<IEnumerable<T>> FetchRecordSetAsync<T>(string sqlString, object[] sqlParameterValue, DataParameters selectParams, GetData<T> GetDataRow);
         Task<T> FetchRecordAsync<T>(string sqlString, GetData<T> GetDataRow);
         Task<string> FetchSingleValueAsync(string sqlString);
+
         /// <summary>
         /// Adds one record to database
         /// </summary>
@@ -41,6 +43,7 @@ namespace DataBaseService
         /// <param name="addParams"></param>
         /// <returns></returns>
         Task<int> AddManyRecordsAsync(string sqlString, ISet<object[]> sqlParameterValue, DataParameters addParams);
+        Task<int> AddManyRecordsAsync(string sqlString, ISet<IDictionary<string,object>> sqlParameterWithValue);
         Task<int> UpdateRecordAsync(string sqlString, object[] sqlParameterValue, DataParameters updateParams);
         Task<int> RemoveRecordAsync(string sqlString, object[] sqlParameterValue, DataParameters delParams);
         Task<int> RemoveManyRecordsAsync(string sqlString, ISet<object[]> sqlParameterValue, DataParameters delParams);

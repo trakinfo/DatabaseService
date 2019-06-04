@@ -61,9 +61,7 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="DataBaseParameter.cs" />
     <Compile Include="IConnectionParameters.cs" />
-    <Compile Include="IDataBaseParameter.cs" />
     <Compile Include="IDataBaseService.cs" />
     <Compile Include="MySqlContext.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
