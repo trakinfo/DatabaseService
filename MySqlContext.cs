@@ -224,14 +224,7 @@ namespace DataBaseService
             return await ExecuteManyCommandsAsync(sqlString, sqlParamWithValue);
         }
 
-        /// <summary>
-        /// Adds one record to database
-        /// </summary>
-        /// <param name="sqlString"> String sql to add data</param>
-        /// <param name="sqlParamValue">Parameters values that are to be added</param>
-        /// <param name="createParams"> A callback method to create parameters due to operation</param>
-        /// <returns>Record ID that was just added</returns>
-        public async Task<int> AddRecordAsync(string sqlString, object[] sqlParamValue, DataParameters createParams)
+         public async Task<int> AddRecordAsync(string sqlString, object[] sqlParamValue, DataParameters createParams)
         {
             await ExecuteCommandAsync(sqlString, sqlParamValue, createParams);
             int.TryParse(await FetchSingleValueAsync("SELECT LAST_INSERT_ID();"), out int lastInsertedID);
@@ -241,6 +234,11 @@ namespace DataBaseService
         public async Task<int> UpdateRecordAsync(string sqlString, object[] sqlParameterValue, DataParameters updateParams)
         {
             return await ExecuteCommandAsync(sqlString, sqlParameterValue, updateParams);
+        }
+
+        public async Task<int> UpdateRecordAsync(string sqlString, IDictionary<string, object> sqlParameterWithValue)
+        {
+            return await ExecuteCommandAsync(sqlString, sqlParameterWithValue);
         }
 
         public async Task<int> RemoveRecordAsync(string sqlString, object[] sqlParameterValue, DataParameters delParams)
@@ -277,7 +275,7 @@ namespace DataBaseService
                 return recordAffected;
             }
         }
-        public async Task<int> ExecuteManyCommandsAsync(string sqlString, ISet<IDictionary<string, object>> sqlParamWithValue)
+        async Task<int> ExecuteManyCommandsAsync(string sqlString, ISet<IDictionary<string, object>> sqlParamWithValue)
         {
             using (var conn = GetConnection())
             {
@@ -285,13 +283,14 @@ namespace DataBaseService
                 var T = conn.BeginTransaction();
                 using (var cmd = new MySqlCommand { CommandText = sqlString, Connection = conn, Transaction = T })
                 {
-                    cmd.Prepare();
-                    foreach ( var p in sqlParamWithValue.First()) cmd.Parameters.AddWithValue(p.Key, p.Value);
-                    int recordAffected = 0;
                     try
                     {
+                        cmd.Prepare();
+                        int recordAffected = 0;
+                        foreach (var p in sqlParamWithValue.First()) cmd.Parameters.AddWithValue(p.Key, p.Value);
                         foreach (var p in sqlParamWithValue) recordAffected += await ExecuteCommandAsync(cmd, p);
                         T.Commit();
+                        return recordAffected;
                     }
                     catch (MySqlException ex)
                     {
@@ -299,18 +298,9 @@ namespace DataBaseService
                         logger.Error($"Źródło błedu: {ex.Source};  Kod błędu: {ex.Number} - {ex.Message}\n{ex.ToString()}");
                         throw new Exception(ex.Message);
                     }
-                    return recordAffected;
                 }
             }
         }
-
-        //private void CreateParams(MySqlCommand cmd, IDictionary<string, object> paramsWithValues)
-        //{
-        //    foreach (var p in paramsWithValues)
-        //    {
-        //        cmd.Parameters.AddWithValue(p.Key, p.Value);
-        //    }
-        //}
 
         async Task<int> ExecuteCommandAsync(string sqlString, object[] sqlParamValue, DataParameters createParams)
         {
@@ -333,6 +323,30 @@ namespace DataBaseService
                     logger.Error($"Źródło błedu: {ex.Source};  Kod błędu: {ex.Number} - {ex.Message}\n{ex.ToString()}");
                     T.Rollback();
                     return 0;
+                }
+            }
+        }
+        async Task<int> ExecuteCommandAsync(string sqlString, IDictionary<string, object> sqlParamWithValue)
+        {
+            using (var conn = GetConnection())
+            {
+                conn.Open();
+                var T = conn.BeginTransaction();
+                using (var cmd = new MySqlCommand { CommandText = sqlString, Connection = conn, Transaction = T })
+                {
+                    try
+                    {
+                        foreach (var p in sqlParamWithValue) cmd.Parameters.AddWithValue(p.Key, p.Value);
+                        var recordAffected = await cmd.ExecuteNonQueryAsync();
+                        T.Commit();
+                        return recordAffected;
+                    }
+                    catch (MySqlException ex)
+                    {
+                        logger.Error($"Źródło błedu: {ex.Source};  Kod błędu: {ex.Number} - {ex.Message}\n{ex.ToString()}");
+                        T.Rollback();
+                        return 0;
+                    }
                 }
             }
         }
@@ -363,14 +377,15 @@ namespace DataBaseService
                 return count;
             }
         }
-        public async Task<int> ExecuteCommandAsync(MySqlCommand cmd, IDictionary<string, object> paramsWithValues)
+        async Task<int> ExecuteCommandAsync(MySqlCommand cmd, IDictionary<string, object> paramsWithValues)
         {
             try
             {
-                //for (int i = 0; i < sqlParamValue.Length; i++)
-                //    cmd.Parameters[i].Value = sqlParamValue[i];
-                foreach (var p in paramsWithValues) cmd.Parameters[p.Key].Value = p.Value;
-                return await cmd.ExecuteNonQueryAsync();
+                using (cmd)
+                {
+                    foreach (var p in paramsWithValues) cmd.Parameters[p.Key].Value = p.Value;
+                    return await cmd.ExecuteNonQueryAsync();
+                }
             }
             catch (MySqlException ex)
             {

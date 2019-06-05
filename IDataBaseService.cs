@@ -28,23 +28,30 @@ namespace DataBaseService
         Task<string> FetchSingleValueAsync(string sqlString);
 
         /// <summary>
-        /// Adds one record to database
+        /// Adds one record to the database
         /// </summary>
-        /// <param name="sqlString"> String sql to add data</param>
+        /// <param name="sqlString"> Sql insert query to add record to the database</param>
         /// <param name="sqlParamValue"> Parameters values that are to be added</param>
         /// <param name="createParams"> A callback method to create parameters due to operation</param>
         /// <returns>Record ID that was just added</returns>
         Task<int> AddRecordAsync(string sqlString, object[] sqlParameterValue, DataParameters addParams);
         /// <summary>
-        /// 
+        /// Adds many records in one transaction
         /// </summary>
         /// <param name="sqlString">Sql insert query to add record to database</param>
         /// <param name="sqlParameterValue"></param>
         /// <param name="addParams"></param>
         /// <returns></returns>
         Task<int> AddManyRecordsAsync(string sqlString, ISet<object[]> sqlParameterValue, DataParameters addParams);
+        /// <summary>
+        /// Adds many records to the database in a single transaction.
+        /// </summary>
+        /// <param name="sqlString">Sql insert query to add record to the database</param>
+        /// <param name="sqlParameterWithValue">Key, value pair that reflects parameter name and parameter value</param>
+        /// <returns>Number of records that were added to the database</returns>
         Task<int> AddManyRecordsAsync(string sqlString, ISet<IDictionary<string,object>> sqlParameterWithValue);
         Task<int> UpdateRecordAsync(string sqlString, object[] sqlParameterValue, DataParameters updateParams);
+        Task<int> UpdateRecordAsync(string sqlString, IDictionary<string,object> sqlParameterWithValue);
         Task<int> RemoveRecordAsync(string sqlString, object[] sqlParameterValue, DataParameters delParams);
         Task<int> RemoveManyRecordsAsync(string sqlString, ISet<object[]> sqlParameterValue, DataParameters delParams);
     }
