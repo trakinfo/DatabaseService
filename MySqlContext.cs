@@ -121,9 +121,8 @@ namespace DataBaseService
             }
         }
 
-        public async Task<IEnumerable<T>> FetchRecordSetAsync<T>(string sqlString, object[] sqlParameterValue, DataParameters createParams, GetData<T> GetDataRow)
+        public async Task<IEnumerable<T>> FetchRecordSetAsync<T>(string sqlString, IDictionary<string, object> sqlParameterWithValue, GetData<T> GetDataRow)
         {
-            var HS = new HashSet<T>();
             try
             {
                 using (var conn = GetConnection())
@@ -132,16 +131,16 @@ namespace DataBaseService
                     var t = conn.BeginTransaction();
                     try
                     {
+                        var HS = new HashSet<T>();
+                        IDataReader R;
                         using (var cmd = new MySqlCommand { CommandText = sqlString, Connection = conn, Transaction = t })
                         {
-                            createParams(cmd);
-                            for (int i = 0; i < sqlParameterValue.Length; i++)
-                                cmd.Parameters[i].Value = sqlParameterValue[i];
-
-                            var R = await cmd.ExecuteReaderAsync();
-                            while (R.Read()) HS.Add(GetDataRow(R));
+                            foreach (var p in sqlParameterWithValue) cmd.Parameters.AddWithValue(p.Key, p.Value);
+                            R = await cmd.ExecuteReaderAsync();
                         }
                         t.Commit();
+                        while (R.Read()) HS.Add(GetDataRow(R));
+                        return await Task.FromResult(HS);
                     }
                     catch (MySqlException ex)
                     {
@@ -151,18 +150,17 @@ namespace DataBaseService
                         throw new Exception(ex.Message);
                     }
                 }
-                return await Task.FromResult(HS);
             }
             catch (Exception ex)
             {
                 logger.Error($"Źródło błedu: {ex.Source};  Kod błędu: {ex.Message}\n{ex.ToString()}");
-                return await Task.FromResult(HS);
+                throw;
+                //return await Task.FromResult(HS);
             }
         }
 
         public async Task<T> FetchRecordAsync<T>(string sqlString, GetData<T> GetDataRow)
         {
-            T DR = default;
             try
             {
                 using (var conn = GetConnection())
@@ -171,11 +169,13 @@ namespace DataBaseService
                     var t = conn.BeginTransaction();
                     try
                     {
+                        T DR = default;
                         using (var R = await new MySqlCommand { CommandText = sqlString, Connection = conn, Transaction = t }.ExecuteReaderAsync())
                         {
                             if (R.Read()) DR = GetDataRow(R);
                         }
                         t.Commit();
+                        return await Task.FromResult(DR);
                     }
                     catch (MySqlException ex)
                     {
@@ -184,12 +184,12 @@ namespace DataBaseService
                         throw new Exception(ex.Message);
                     }
                 }
-                return await Task.FromResult(DR);
             }
             catch (Exception ex)
             {
                 logger.Error($"Źródło błedu: {ex.Source};  Kod błędu: {ex.Message}\n{ex.ToString()}");
-                return await Task.FromResult(DR);
+                throw;
+                //return await Task.FromResult(DR);
             }
         }
         public async Task<string> FetchSingleValueAsync(string sqlString)
@@ -215,65 +215,63 @@ namespace DataBaseService
                 }
             }
         }
-        public async Task<int> AddManyRecordsAsync(string sqlString, ISet<object[]> sqlParamValue, DataParameters createParams)
+        public async Task<int> GetLastInsertedID()
         {
-            return await ExecuteManyCommandsAsync(sqlString, sqlParamValue, createParams);
+            var sqlString = "SELECT LAST_INSERT_ID();";
+            int lastInsertedID = default;
+            int.TryParse(await FetchSingleValueAsync(sqlString), out lastInsertedID);
+            return lastInsertedID;
         }
+  
         public async Task<int> AddManyRecordsAsync(string sqlString, ISet<IDictionary<string, object>> sqlParamWithValue)
         {
             return await ExecuteManyCommandsAsync(sqlString, sqlParamWithValue);
         }
-
-         public async Task<int> AddRecordAsync(string sqlString, object[] sqlParamValue, DataParameters createParams)
+        public async Task<int> AddRecordAsync(string sqlString, IDictionary<string, object> sqlParamWithValue)
         {
-            await ExecuteCommandAsync(sqlString, sqlParamValue, createParams);
-            int.TryParse(await FetchSingleValueAsync("SELECT LAST_INSERT_ID();"), out int lastInsertedID);
-            return await Task.FromResult(lastInsertedID);
+            await ExecuteCommandAsync(sqlString, sqlParamWithValue);
+            return await GetLastInsertedID();
         }
-
-        public async Task<int> UpdateRecordAsync(string sqlString, object[] sqlParameterValue, DataParameters updateParams)
-        {
-            return await ExecuteCommandAsync(sqlString, sqlParameterValue, updateParams);
-        }
-
         public async Task<int> UpdateRecordAsync(string sqlString, IDictionary<string, object> sqlParameterWithValue)
         {
             return await ExecuteCommandAsync(sqlString, sqlParameterWithValue);
         }
-
-        public async Task<int> RemoveRecordAsync(string sqlString, object[] sqlParameterValue, DataParameters delParams)
-        {
-            return await ExecuteCommandAsync(sqlString, sqlParameterValue, delParams);
-        }
-
-        public async Task<int> RemoveManyRecordsAsync(string sqlString, ISet<object[]> sqlParameterValue, DataParameters delParams)
-        {
-            return await ExecuteManyCommandsAsync(sqlString, sqlParameterValue, delParams);
-        }
-        public async Task<int> ExecuteManyCommandsAsync(string sqlString, ISet<object[]> sqlParamValue, DataParameters createParams)
+        public async Task<int> UpdateRecordAsync(string sqlString, Tuple<string, object> sqlParameterWithValue)
         {
             using (var conn = GetConnection())
             {
                 conn.Open();
                 var T = conn.BeginTransaction();
-                //var cmd = CreateCommand(conn, T, CommandType.Text, sqlString);
-                var cmd = new MySqlCommand { CommandText = sqlString, Connection = conn, Transaction = T };
-                createParams(cmd);
-                int recordAffected = 0;
-                try
+                using (var cmd = new MySqlCommand { CommandText = sqlString, Connection = conn, Transaction = T })
                 {
-                    foreach (var p in sqlParamValue) recordAffected += await ExecuteCommandAsync(cmd, p);
-                    T.Commit();
+                    try
+                    {
+                        cmd.Parameters.AddWithValue(sqlParameterWithValue.Item1, sqlParameterWithValue.Item2);
+                        var recordAffected = await cmd.ExecuteNonQueryAsync();
+                        T.Commit();
+                        return recordAffected;
+                    }
+                    catch (MySqlException ex)
+                    {
+                        T.Rollback();
+                        logger.Error($"Źródło błedu: {ex.Source};  Kod błędu: {ex.Number} - {ex.Message}\n{ex.ToString()}");
+                        return 0;
+                    }
                 }
-                catch (MySqlException ex)
-                {
-                    T.Rollback();
-                    //recordAffected = 0;
-                    logger.Error($"Źródło błedu: {ex.Source};  Kod błędu: {ex.Number} - {ex.Message}\n{ex.ToString()}");
-                    throw new Exception(ex.Message);
-                }
-                return recordAffected;
             }
+        }
+        public async Task<int> RemoveRecordAsync(string sqlString, IDictionary<string, object> sqlParameterWithValue)
+        {
+            return await ExecuteCommandAsync(sqlString, sqlParameterWithValue);
+        }
+
+        public async Task<int> RemoveManyRecordsAsync(string sqlString, ISet<IDictionary<string, object>> sqlParameterWithValue)
+        {
+            return await ExecuteManyCommandsAsync(sqlString, sqlParameterWithValue);
+        }
+        public async Task<int> RemoveManyRecordsAsync(string sqlString, ISet<Tuple<string, object>> sqlParameterWithValue)
+        {
+            return await ExecuteManyCommandsAsync(sqlString, sqlParameterWithValue);
         }
         async Task<int> ExecuteManyCommandsAsync(string sqlString, ISet<IDictionary<string, object>> sqlParamWithValue)
         {
@@ -295,37 +293,40 @@ namespace DataBaseService
                     catch (MySqlException ex)
                     {
                         T.Rollback();
-                        logger.Error($"Źródło błedu: {ex.Source};  Kod błędu: {ex.Number} - {ex.Message}\n{ex.ToString()}");
+                        //logger.Error($"Źródło błedu: {ex.Source};  Kod błędu: {ex.Number} - {ex.Message}\n{ex.ToString()}");
+                        throw new Exception(ex.Message);
+                    }
+                }
+            }
+        }
+        async Task<int> ExecuteManyCommandsAsync(string sqlString, ISet<Tuple<string, object>> sqlParamWithValue)
+        {
+            using (var conn = GetConnection())
+            {
+                conn.Open();
+                var T = conn.BeginTransaction();
+                using (var cmd = new MySqlCommand { CommandText = sqlString, Connection = conn, Transaction = T })
+                {
+                    try
+                    {
+                        int recordAffected = 0;
+
+                        cmd.Parameters.AddWithValue(sqlParamWithValue.First().Item1, sqlParamWithValue.First().Item2);
+                        cmd.Prepare();
+                        foreach (var p in sqlParamWithValue) recordAffected += await ExecuteCommandAsync(cmd, p.Item1, p.Item2);
+                        T.Commit();
+                        return recordAffected;
+                    }
+                    catch (MySqlException ex)
+                    {
+                        T.Rollback();
+                        //logger.Error($"Źródło błedu: {ex.Source};  Kod błędu: {ex.Number} - {ex.Message}\n{ex.ToString()}");
                         throw new Exception(ex.Message);
                     }
                 }
             }
         }
 
-        async Task<int> ExecuteCommandAsync(string sqlString, object[] sqlParamValue, DataParameters createParams)
-        {
-            using (var conn = GetConnection())
-            {
-                conn.Open();
-                var T = conn.BeginTransaction();
-                //var cmd = CreateCommand(conn, T, CommandType.Text, sqlString);
-                var cmd = new MySqlCommand { CommandText = sqlString, Connection = conn, Transaction = T };
-
-                createParams(cmd);
-                try
-                {
-                    var recordAffected = await ExecuteCommandAsync(cmd, sqlParamValue);
-                    T.Commit();
-                    return recordAffected;
-                }
-                catch (MySqlException ex)
-                {
-                    logger.Error($"Źródło błedu: {ex.Source};  Kod błędu: {ex.Number} - {ex.Message}\n{ex.ToString()}");
-                    T.Rollback();
-                    return 0;
-                }
-            }
-        }
         async Task<int> ExecuteCommandAsync(string sqlString, IDictionary<string, object> sqlParamWithValue)
         {
             using (var conn = GetConnection())
@@ -343,40 +344,14 @@ namespace DataBaseService
                     }
                     catch (MySqlException ex)
                     {
-                        logger.Error($"Źródło błedu: {ex.Source};  Kod błędu: {ex.Number} - {ex.Message}\n{ex.ToString()}");
                         T.Rollback();
+                        logger.Error($"Źródło błedu: {ex.Source};  Kod błędu: {ex.Number} - {ex.Message}\n{ex.ToString()}");
                         return 0;
                     }
                 }
             }
         }
 
-        async Task<int> ExecuteCommandAsync(MySqlCommand cmd, object[] sqlParamValue)
-        {
-            using (cmd)
-            {
-                int count = 0;
-                try
-                {
-                    for (int i = 0; i < sqlParamValue.Length; i++)
-                        cmd.Parameters[i].Value = sqlParamValue[i];
-                    count = await cmd.ExecuteNonQueryAsync();
-                }
-                catch (MySqlException ex)
-                {
-                    logger.Error($"Źródło błedu: {ex.Source};  Kod błędu: {ex.Number} - {ex.Message}\n{ex.ToString()}");
-
-                    switch (ex.Number)
-                    {
-                        case 1062:
-                            return 0;
-                        default:
-                            throw;
-                    }
-                }
-                return count;
-            }
-        }
         async Task<int> ExecuteCommandAsync(MySqlCommand cmd, IDictionary<string, object> paramsWithValues)
         {
             try
@@ -390,14 +365,31 @@ namespace DataBaseService
             catch (MySqlException ex)
             {
                 logger.Error($"Źródło błedu: {ex.Source};  Kod błędu: {ex.Number} - {ex.Message}\n{ex.ToString()}");
+                throw;
+                //switch (ex.Number)
+                //{
+                //    case 1062:
+                //        return 0;
+                //    default:
+                //        throw;
+                //}
+            }
+        }
 
-                switch (ex.Number)
+        async Task<int> ExecuteCommandAsync(MySqlCommand cmd, string paramName, object paramValue)
+        {
+            try
+            {
+                using (cmd)
                 {
-                    case 1062:
-                        return 0;
-                    default:
-                        throw;
+                    cmd.Parameters[paramName].Value = paramValue;
+                    return await cmd.ExecuteNonQueryAsync();
                 }
+            }
+            catch (MySqlException ex)
+            {
+                logger.Error($"Źródło błedu: {ex.Source};  Kod błędu: {ex.Number} - {ex.Message}\n{ex.ToString()}");
+                throw;
             }
         }
 
@@ -417,5 +409,7 @@ namespace DataBaseService
                 throw new Exception(ex.Message);
             }
         }
+
+
     }
 }
