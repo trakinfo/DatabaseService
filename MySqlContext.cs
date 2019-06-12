@@ -346,7 +346,7 @@ namespace DataBaseService
                     {
                         T.Rollback();
                         logger.Error($"Źródło błedu: {ex.Source};  Kod błędu: {ex.Number} - {ex.Message}\n{ex.ToString()}");
-                        return 0;
+                        throw new Exception(ex.Message);
                     }
                 }
             }
