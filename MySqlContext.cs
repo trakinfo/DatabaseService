@@ -25,15 +25,26 @@ namespace DataBaseService
         /// <summary>
         /// Builds a connection string to be used for getting MySql connection to the server, based on a connection string
         /// </summary>
-        /// <param name="connectionString"></param>
+        /// <param name="connectionString">Ready to use string to connect to database</param>
         public MySqlContext(string connectionString) => this.connectionString = connectionString;
+        /// <summary>
+        /// Builds a connection string to be used for getting MySql connection to the server, based on a connection string and StateChangeEventHandler delegate
+        /// </summary>
+        /// <param name="connectionString">Ready to use string to connect to database</param>
+        /// <param name="connectionStatus">Callback method injected to track state of connection</param>
+        public MySqlContext(string connectionString, StateChangeEventHandler connectionStatus) : this(connectionString) { ConnectionStatusDelegate = connectionStatus; }
 
         /// <summary>
         /// Builds a connection string to be used for getting MySql connection to the server, based on the IConnectionParameters.
         /// </summary>
-        /// <param name="cp">Parameter set as IConnectionParameters</param>
+        /// <param name="cp">Parameter set of IConnectionParameters type</param>
         public MySqlContext(IConnectionParameters cp) : this(cp.ServerAddress, cp.ServerPort, cp.UserName, cp.Password, cp.DBName, cp.CharSet, cp.SSLMode) { }
-        public MySqlContext(IConnectionParameters cp, StateChangeEventHandler connectionStatus) : this(cp.ServerAddress, cp.ServerPort, cp.UserName, cp.Password, cp.DBName, cp.CharSet, cp.SSLMode, connectionStatus) { }
+        /// <summary>
+        /// Builds a connection string to be used for getting MySql connection to the server, based on the IConnectionParameters and StateChangeEventHandler delegate.
+        /// </summary>
+        /// <param name="cp">Parameter set of IConnectionParameters type</param>
+        /// <param name="connectionStatus">Callback method injected to track state of connection</param>
+        public MySqlContext(IConnectionParameters cp, StateChangeEventHandler connectionStatus) : this(cp) { ConnectionStatusDelegate = connectionStatus; }
 
         /// <summary>
         /// Builds a connection string to be used for getting MySql connection to the server, based on parameters.
@@ -63,25 +74,7 @@ namespace DataBaseService
 
             connectionString = connString.ToString();
         }
-        public MySqlContext(string serverAddress, uint serverPort, string userName, string passwd, string dbName, string charset, int sslMode, StateChangeEventHandler connectionStatus)
-        {
-            ConnectionStatusDelegate = connectionStatus;
-            var connString = new MySqlConnectionStringBuilder()
-            {
-                Server = serverAddress,
-                UserID = userName,
-                Password = passwd,
-                Database = dbName,
-                CharacterSet = charset,
-                SslMode = (MySqlSslMode)sslMode,
-                Pooling = true,
-                MinimumPoolSize = 1,
-                MaximumPoolSize = 10,
-                Port = serverPort
-            };
 
-            connectionString = connString.ToString();
-        }
         /// <summary>
         /// The async method is getting records from database and returning them as a task of IEnumerable set of items.
         /// </summary>
@@ -222,19 +215,18 @@ namespace DataBaseService
             int.TryParse(await FetchSingleValueAsync(sqlString), out lastInsertedID);
             return lastInsertedID;
         }
-  
-        public async Task<int> AddManyRecordsAsync(string sqlString, ISet<IDictionary<string, object>> sqlParamWithValue)
+
+        public async Task<(int, long)> AddManyRecordsAsync(string sqlString, ISet<IDictionary<string, object>> sqlParamWithValue)
         {
             return await ExecuteManyCommandsAsync(sqlString, sqlParamWithValue);
         }
-        public async Task<int> AddRecordAsync(string sqlString, IDictionary<string, object> sqlParamWithValue)
+        public async Task<long> AddRecordAsync(string sqlString, IDictionary<string, object> sqlParamWithValue)
         {
-            await ExecuteCommandAsync(sqlString, sqlParamWithValue);
-            return await GetLastInsertedID();
+            return await Task.FromResult(ExecuteCommandAsync(sqlString, sqlParamWithValue).Result.Item2);
         }
         public async Task<int> UpdateRecordAsync(string sqlString, IDictionary<string, object> sqlParameterWithValue)
         {
-            return await ExecuteCommandAsync(sqlString, sqlParameterWithValue);
+            return await Task.FromResult(ExecuteCommandAsync(sqlString, sqlParameterWithValue).Result.Item1);
         }
         public async Task<int> UpdateRecordAsync(string sqlString, Tuple<string, object> sqlParameterWithValue)
         {
@@ -262,18 +254,18 @@ namespace DataBaseService
         }
         public async Task<int> RemoveRecordAsync(string sqlString, IDictionary<string, object> sqlParameterWithValue)
         {
-            return await ExecuteCommandAsync(sqlString, sqlParameterWithValue);
+            return await Task.FromResult(ExecuteCommandAsync(sqlString, sqlParameterWithValue).Result.Item1);
         }
 
         public async Task<int> RemoveManyRecordsAsync(string sqlString, ISet<IDictionary<string, object>> sqlParameterWithValue)
         {
-            return await ExecuteManyCommandsAsync(sqlString, sqlParameterWithValue);
+            return await Task.FromResult(ExecuteManyCommandsAsync(sqlString, sqlParameterWithValue).Result.RecordCount);
         }
         public async Task<int> RemoveManyRecordsAsync(string sqlString, ISet<Tuple<string, object>> sqlParameterWithValue)
         {
             return await ExecuteManyCommandsAsync(sqlString, sqlParameterWithValue);
         }
-        async Task<int> ExecuteManyCommandsAsync(string sqlString, ISet<IDictionary<string, object>> sqlParamWithValue)
+        async Task<(int RecordCount, long LastInserteId)> ExecuteManyCommandsAsync(string sqlString, ISet<IDictionary<string, object>> sqlParamWithValue)
         {
             using (var conn = GetConnection())
             {
@@ -288,7 +280,7 @@ namespace DataBaseService
                         foreach (var p in sqlParamWithValue.First()) cmd.Parameters.AddWithValue(p.Key, p.Value);
                         foreach (var p in sqlParamWithValue) recordAffected += await ExecuteCommandAsync(cmd, p);
                         T.Commit();
-                        return recordAffected;
+                        return (recordAffected, cmd.LastInsertedId);
                     }
                     catch (MySqlException ex)
                     {
@@ -327,7 +319,7 @@ namespace DataBaseService
             }
         }
 
-        async Task<int> ExecuteCommandAsync(string sqlString, IDictionary<string, object> sqlParamWithValue)
+        async Task<(int, long)> ExecuteCommandAsync(string sqlString, IDictionary<string, object> sqlParamWithValue)
         {
             using (var conn = GetConnection())
             {
@@ -340,7 +332,7 @@ namespace DataBaseService
                         foreach (var p in sqlParamWithValue) cmd.Parameters.AddWithValue(p.Key, p.Value);
                         var recordAffected = await cmd.ExecuteNonQueryAsync();
                         T.Commit();
-                        return recordAffected;
+                        return (recordAffected, cmd.LastInsertedId);
                     }
                     catch (MySqlException ex)
                     {

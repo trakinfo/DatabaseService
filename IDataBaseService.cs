@@ -35,14 +35,15 @@ namespace DataBaseService
         /// <param name="sqlString"> Sql insert query to add record to the database</param>
         /// <param name="sqlParameterWithValue">A dictionary of parameters with values</param>
         /// <returns>Record ID which was added</returns>
-        Task<int> AddRecordAsync(string sqlString, IDictionary<string,object> sqlParameterWithValue);
+        Task<long> AddRecordAsync(string sqlString, IDictionary<string,object> sqlParameterWithValue);
+
         /// <summary>
         /// Adds many records to the database in a single transaction.
         /// </summary>
         /// <param name="sqlString">Sql insert query to add record to the database</param>
         /// <param name="sqlParameterWithValue">Key, value pair that reflects parameter name and parameter value</param>
-        /// <returns>Number of records that were added to the database</returns>
-        Task<int> AddManyRecordsAsync(string sqlString, ISet<IDictionary<string,object>> sqlParameterWithValue);
+        /// <returns>Number of records that were added to the database and ID of last inserted record</returns>
+        Task<(int RecordCount, long InsertedRecordId)> AddManyRecordsAsync(string sqlString, ISet<IDictionary<string,object>> sqlParameterWithValue);
         Task<int> UpdateRecordAsync(string sqlString, Tuple<string, object> sqlParameterWithValue);
         Task<int> UpdateRecordAsync(string sqlString, IDictionary<string,object> sqlParameterWithValue);
         /// <summary>
